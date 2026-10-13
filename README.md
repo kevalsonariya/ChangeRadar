@@ -16,7 +16,7 @@ ChangeRadar monitors supported public webpages (such as university circulars, sc
 | **Icons** | **Lucide React** | Clean, consistent interface iconography |
 | **HTTP Client (UI)** | **Axios** | Typed API service communicating with backend |
 | **Backend Framework** | **Python FastAPI** | Asynchronous REST API service |
-| **Database** | **SQLite (SQLAlchemy)** | Zero-config, lightweight relational storage |
+| **Database** | **SQLite (SQLAlchemy)** | Zero-config, lightweight relational storage (`changeradar.db`) |
 | **Web Scraping** | **HTTPX + BeautifulSoup4**| Robust asynchronous HTML fetching & content parsing |
 | **Difference Engine** | **Python `difflib`** | Standard library unified text delta computation |
 
@@ -44,13 +44,14 @@ ChangeRadar monitors supported public webpages (such as university circulars, sc
 ChangeRadar/
 ├── backend/
 │   ├── app/
-│   │   ├── models/           # SQLAlchemy database models (Website, Change, Deadline)
+│   │   ├── models/           # SQLAlchemy database models (Website, Snapshot, Change, Notification, Deadline)
 │   │   ├── routers/          # FastAPI routers (websites, changes, deadlines, notifications)
-│   │   ├── schemas/          # Pydantic schemas and request/response models
-│   │   ├── services/         # Scraper (HTTPX + BS4) and Differ (difflib)
-│   │   ├── database.py       # SQLite engine and session management
-│   │   └── main.py           # FastAPI entrypoint with CORS middleware
-│   └── requirements.txt      # Python dependencies
+│   │   ├── schemas/          # Pydantic schemas and request/response validation
+│   │   ├── services/         # Scraper, differ, and website database CRUD service
+│   │   ├── database.py       # SQLite engine, sessionmaker, and table initializer
+│   │   └── main.py           # FastAPI entrypoint with CORS middleware & lifespan
+│   ├── requirements.txt      # Python dependencies
+│   └── changeradar.db        # Persistent SQLite database file
 │
 ├── frontend/
 │   ├── public/
@@ -77,13 +78,54 @@ ChangeRadar/
 
 ## 🛠️ Getting Started
 
-### 1. Frontend Setup (React + Vite)
+### 1. Backend Setup & Run Commands (FastAPI + SQLite)
 
-```bash
+```powershell
+# Navigate to backend directory
+cd "e:\DEGREE\5TH SEM\SGP\ChangeRadar\backend"
+
+# (Optional) Create and activate a virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# Install required dependencies
+pip install -r requirements.txt
+
+# Start the FastAPI server with Uvicorn
+uvicorn app.main:app --reload --port 8000
+```
+
+Alternatively, from the project root:
+```powershell
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+The backend API will be available at:
+- **API Root**: `http://localhost:8000/`
+- **Interactive Swagger Docs**: `http://localhost:8000/docs`
+- **ReDoc Specification**: `http://localhost:8000/redoc`
+- **Health Check**: `http://localhost:8000/health`
+
+#### Available API Endpoints:
+- `GET /health` — Service health and active SQLite connection check
+- `GET /websites` or `GET /api/websites` — List all monitored websites
+- `POST /websites` or `POST /api/websites` — Register a new website to monitor (validates URL and prevents duplicates)
+- `GET /websites/{id}` or `GET /api/websites/{id}` — Get details for a specific website
+- `DELETE /websites/{id}` or `DELETE /api/websites/{id}` — Delete a website and related data
+- `GET /api/changes` — List detected content diffs
+- `GET /api/deadlines` — List upcoming deadlines
+- `GET /api/deadlines/summary` — Aggregate counts for dashboard summary
+- `GET /api/notifications` — List system and change alerts
+
+---
+
+### 2. Frontend Setup (React + Vite)
+
+```powershell
 # Navigate to frontend directory
-cd frontend
+cd "e:\DEGREE\5TH SEM\SGP\ChangeRadar\frontend"
 
-# Install dependencies (already prepared)
+# Install frontend dependencies
 npm install --legacy-peer-deps
 
 # Start Vite development server
@@ -93,44 +135,16 @@ npm run dev
 The frontend will be available at: **`http://localhost:5173`**
 
 To test or generate a production build:
-```bash
+```powershell
 npm run build
 ```
 
 ---
 
-### 2. Backend Setup (FastAPI + Python)
+## 🗄️ Database Architecture (SQLite Models)
 
-```bash
-# Navigate to backend directory
-cd backend
-
-# Create a virtual environment (recommended)
-python -m venv venv
-
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
-# source venv/bin/activate
-
-# Install backend dependencies
-pip install -r requirements.txt
-
-# Start the FastAPI server with uvicorn
-uvicorn app.main:app --reload --port 8000
-```
-
-The backend API will be available at:
-- **API Root**: `http://localhost:8000`
-- **Swagger Documentation**: `http://localhost:8000/docs`
-- **Health Check**: `http://localhost:8000/health`
-
----
-
-## ⚡ Key Features
-
-1. **Intelligent Diff Viewer**: Side-by-side and unified code/text diff views highlighting insertions in emerald and deletions in rose.
-2. **Selector Isolation**: Monitor either entire webpage text or target a specific CSS selector (e.g. `.circular-table` or `#announcements`).
-3. **Deadline Urgency Badges**: Automatic categorization into Critical (≤ 3 days), Upcoming, or Passed.
-4. **Resilient API Architecture**: Transparent error handling that alerts the user if the backend is down without crashing the UI.
+1. **`websites`**: Stores target URL, name, status (`active`, `warning`, `error`, `paused`), check interval, category, selector, and timestamps.
+2. **`snapshots`**: Stores captured webpage text, SHA-256 content hash, capture timestamp, and foreign key link to `website_id`.
+3. **`changes`**: Records detected text modifications, line addition/deletion counts, foreign keys to previous and new snapshots, diff unified text, and change summary.
+4. **`notifications`**: Stores alert title, message, creation timestamp, read status, and associations to `website_id` and `change_id`.
+5. **`deadlines`**: Tracks title, description, due date, urgency priority (`high`, `medium`, `low`), days left, and completion status.

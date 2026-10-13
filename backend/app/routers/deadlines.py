@@ -1,68 +1,37 @@
 """API routes for Deadlines and Dashboard Summaries."""
 
-from fastapi import APIRouter
 from typing import List
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..models.models import Website, Change, Deadline, Notification
 from ..schemas.schemas import DeadlineResponse, DashboardSummaryResponse
 
-router = APIRouter(prefix="/api/deadlines", tags=["deadlines"])
+router = APIRouter(tags=["deadlines"])
 
-_DEMO_DEADLINES = [
-    {
-        "id": 1,
-        "website_id": 1,
-        "title": "GTU Hall Ticket Verification & Download",
-        "due_date": "2026-10-22",
-        "days_left": 9,
-        "source_url": "https://www.gtu.ac.in/Circular.aspx",
-        "priority": "high",
-        "status": "upcoming",
-        "category": "Exams"
-    },
-    {
-        "id": 2,
-        "website_id": 2,
-        "title": "NPTEL Week 8 Assignment Submission",
-        "due_date": "2026-10-18",
-        "days_left": 5,
-        "source_url": "https://swayam.gov.in/nc_details/NPTEL",
-        "priority": "high",
-        "status": "upcoming",
-        "category": "Assignments"
-    },
-    {
-        "id": 3,
-        "website_id": 4,
-        "title": "National Scholarship Scheme (NSP) Portal Closes",
-        "due_date": "2026-10-31",
-        "days_left": 18,
-        "source_url": "https://scholarships.gov.in",
-        "priority": "medium",
-        "status": "upcoming",
-        "category": "Scholarships"
-    },
-    {
-        "id": 4,
-        "website_id": 3,
-        "title": "Hackathon Team Registration Deadline",
-        "due_date": "2026-10-16",
-        "days_left": 3,
-        "source_url": "https://studentevents.college.edu/hackathon",
-        "priority": "high",
-        "status": "critical",
-        "category": "Competitions"
-    }
-]
 
-@router.get("", response_model=List[DeadlineResponse])
-def get_deadlines():
-    return _DEMO_DEADLINES
+@router.get("", response_model=List[DeadlineResponse], summary="List all deadlines")
+def get_deadlines(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """Retrieve all deadlines tracked in the SQLite database."""
+    return db.query(Deadline).order_by(Deadline.due_date.asc()).offset(skip).limit(limit).all()
 
-@router.get("/summary", response_model=DashboardSummaryResponse)
-def get_dashboard_summary():
+
+@router.get("/summary", response_model=DashboardSummaryResponse, summary="Get dashboard summary metrics")
+def get_dashboard_summary(db: Session = Depends(get_db)):
+    """Compute real dashboard metric counts directly from SQLite persistent storage."""
+    active_count = db.query(Website).filter(Website.status == "active").count()
+    total_changes = db.query(Change).count()
+    upcoming_deadlines = db.query(Deadline).filter(Deadline.is_completed.is_(False)).count()
+    unread_notifications = db.query(Notification).filter(Notification.is_read.is_(False)).count()
+
     return {
-        "active_monitors_count": 4,
-        "total_changes_detected": 16,
-        "upcoming_deadlines_count": 4,
-        "unread_notifications_count": 2,
+        "active_monitors_count": active_count,
+        "total_changes_detected": total_changes,
+        "upcoming_deadlines_count": upcoming_deadlines,
+        "unread_notifications_count": unread_notifications,
         "health_status": "Healthy"
     }
