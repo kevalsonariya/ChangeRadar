@@ -68,9 +68,140 @@ class ChangeResponse(BaseModel):
     deletions_count: int = 0
     old_content_snippet: Optional[str] = None
     new_content_snippet: Optional[str] = None
+    diff_unified: Optional[str] = None
     is_read: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CheckWebsiteResponse(BaseModel):
+    website_id: int
+    status: str
+    message: str
+    snapshot_id: Optional[int] = None
+    change_id: Optional[int] = None
+    content_hash: Optional[str] = None
+    detected_change: Optional[ChangeResponse] = None
+    checked_at: datetime
+
+
+class DeadlineCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255, description="Title of the deadline or event")
+    due_date: str = Field(..., min_length=4, max_length=50, description="Due date (YYYY-MM-DD or standard formatted date)")
+    priority: str = Field(default="medium", description="Priority level: high, medium, low")
+    category: Optional[str] = Field(default="Academic", max_length=100)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    website_id: Optional[int] = None
+    source_url: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Deadline title cannot be blank or whitespace only")
+        return trimmed
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: str) -> str:
+        val = v.strip().lower()
+        if val not in ("high", "medium", "low"):
+            raise ValueError("Priority must be one of: 'high', 'medium', 'low'")
+        return val
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Due date cannot be blank")
+        import re
+        clean = re.sub(r"(st|nd|rd|th)", "", trimmed).strip()
+        formats = [
+            "%Y-%m-%d",
+            "%b %d, %Y",
+            "%B %d, %Y",
+            "%b %d %Y",
+            "%B %d %Y",
+            "%d %b %Y",
+            "%d %B %Y",
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%m/%d/%Y",
+        ]
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(clean, fmt)
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        raise ValueError(f"Invalid date format '{trimmed}'. Expected YYYY-MM-DD or standard format (e.g. Oct 25, 2026).")
+
+
+class DeadlineUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    due_date: Optional[str] = Field(default=None, min_length=4, max_length=50)
+    priority: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    is_completed: Optional[bool] = None
+    website_id: Optional[int] = None
+    source_url: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Deadline title cannot be blank or whitespace only")
+        return trimmed
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        val = v.strip().lower()
+        if val not in ("high", "medium", "low"):
+            raise ValueError("Priority must be one of: 'high', 'medium', 'low'")
+        return val
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Due date cannot be blank")
+        import re
+        clean = re.sub(r"(st|nd|rd|th)", "", trimmed).strip()
+        formats = [
+            "%Y-%m-%d",
+            "%b %d, %Y",
+            "%B %d, %Y",
+            "%b %d %Y",
+            "%B %d %Y",
+            "%d %b %Y",
+            "%d %B %Y",
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%m/%d/%Y",
+        ]
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(clean, fmt)
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        raise ValueError(f"Invalid date format '{trimmed}'. Expected YYYY-MM-DD or standard format (e.g. Oct 25, 2026).")
+
+
+class DeadlineToggleComplete(BaseModel):
+    is_completed: Optional[bool] = None
 
 
 class DeadlineResponse(BaseModel):

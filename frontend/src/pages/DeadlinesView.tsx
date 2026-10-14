@@ -5,7 +5,11 @@ import {
   Plus, 
   Clock, 
   Search, 
-  AlertTriangle 
+  AlertTriangle,
+  RotateCcw,
+  Trash2,
+  Pencil,
+  Check
 } from 'lucide-react';
 import type { DeadlineItem, DeadlinePriority } from '../types';
 import { Badge } from '../components/common/Badge';
@@ -13,18 +17,34 @@ import { EmptyState } from '../components/common/EmptyState';
 
 interface DeadlinesViewProps {
   deadlines: DeadlineItem[];
-  onAddDeadline: (deadline: Omit<DeadlineItem, 'id'>) => void;
+  onAddDeadline: (deadline: {
+    title: string;
+    due_date: string;
+    priority?: DeadlinePriority;
+    category?: string;
+    description?: string;
+    source_url?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  onToggleComplete?: (id: number) => Promise<void>;
+  onDeleteDeadline?: (id: number) => Promise<void>;
+  onEditDeadline?: (id: number, data: Partial<DeadlineItem>) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
   deadlines,
   onAddDeadline,
+  onToggleComplete,
+  onDeleteDeadline,
+  onEditDeadline,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // New Deadline form state
+  // Add Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
   const [newUrl, setNewUrl] = useState('');
@@ -32,14 +52,28 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
   const [newPriority, setNewPriority] = useState<DeadlinePriority>('high');
   const [newDescription, setNewDescription] = useState('');
 
+  // Edit Modal State
+  const [editingItem, setEditingItem] = useState<DeadlineItem | null>(null);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [editTitle, setEditTitle] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editUrl, setEditUrl] = useState('');
+  const [editCategory, setEditCategory] = useState('Academic');
+  const [editPriority, setEditPriority] = useState<DeadlinePriority>('medium');
+  const [editDescription, setEditDescription] = useState('');
+
   const filteredDeadlines = deadlines.filter((d) => {
     let matchesStatus = true;
     if (filterStatus === 'urgent') {
-      matchesStatus = d.days_left <= 3 || d.status === 'critical';
+      matchesStatus = !d.is_completed && (d.days_left <= 3 || d.status === 'critical');
     } else if (filterStatus === 'upcoming') {
-      matchesStatus = d.days_left > 3 && d.status !== 'passed';
+      matchesStatus = !d.is_completed && d.days_left > 3 && d.status !== 'passed';
     } else if (filterStatus === 'passed') {
-      matchesStatus = d.status === 'passed';
+      matchesStatus = d.status === 'passed' && !d.is_completed;
+    } else if (filterStatus === 'completed') {
+      matchesStatus = !!d.is_completed;
     }
 
     const matchesSearch =
@@ -49,26 +83,75 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
     return matchesStatus && matchesSearch;
   });
 
-  const handleCreateDeadline = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim() || !newDate.trim()) return;
-
-    onAddDeadline({
-      title: newTitle.trim(),
-      due_date: newDate.trim(),
-      days_left: 7, // calculated default
-      source_url: newUrl.trim() || 'https://www.example.edu',
-      priority: newPriority,
-      status: 'upcoming',
-      category: newCategory,
-      description: newDescription.trim() || undefined,
-    });
-
+  const handleOpenAddModal = () => {
     setNewTitle('');
     setNewDate('');
     setNewUrl('');
     setNewDescription('');
-    setIsModalOpen(false);
+    setNewPriority('high');
+    setNewCategory('Academic');
+    setAddError(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleCreateDeadline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newDate.trim()) return;
+
+    setIsSubmittingAdd(true);
+    setAddError(null);
+
+    const res = await onAddDeadline({
+      title: newTitle.trim(),
+      due_date: newDate.trim(),
+      source_url: newUrl.trim() || undefined,
+      priority: newPriority,
+      category: newCategory,
+      description: newDescription.trim() || undefined,
+    });
+
+    setIsSubmittingAdd(false);
+    if (res.success) {
+      setIsAddModalOpen(false);
+    } else {
+      setAddError(res.error || 'Failed to create deadline. Please verify date format.');
+    }
+  };
+
+  const handleOpenEditModal = (item: DeadlineItem) => {
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditDate(item.due_date);
+    setEditUrl(item.source_url || '');
+    setEditCategory(item.category || 'Academic');
+    setEditPriority(item.priority || 'medium');
+    setEditDescription(item.description || '');
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !onEditDeadline) return;
+    if (!editTitle.trim() || !editDate.trim()) return;
+
+    setIsSubmittingEdit(true);
+    setEditError(null);
+
+    const res = await onEditDeadline(editingItem.id, {
+      title: editTitle.trim(),
+      due_date: editDate.trim(),
+      source_url: editUrl.trim() || undefined,
+      priority: editPriority,
+      category: editCategory,
+      description: editDescription.trim() || undefined,
+    });
+
+    setIsSubmittingEdit(false);
+    if (res.success) {
+      setEditingItem(null);
+    } else {
+      setEditError(res.error || 'Failed to update deadline.');
+    }
   };
 
   return (
@@ -80,7 +163,8 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
             { id: 'all', label: 'All Deadlines' },
             { id: 'urgent', label: 'Urgent (≤ 3 Days)' },
             { id: 'upcoming', label: 'Upcoming' },
-            { id: 'passed', label: 'Passed / Archived' },
+            { id: 'passed', label: 'Passed / Expired' },
+            { id: 'completed', label: 'Completed' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -109,7 +193,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
           </div>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenAddModal}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-teal-500 hover:bg-teal-400 text-navy-950 text-xs font-semibold shadow-md shadow-teal-500/20 transition-colors whitespace-nowrap"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -122,33 +206,46 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
       {filteredDeadlines.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredDeadlines.map((item) => {
-            const isUrgent = item.days_left <= 3 || item.status === 'critical';
+            const isCompleted = !!item.is_completed;
+            const isUrgent = !isCompleted && (item.days_left <= 3 || item.status === 'critical');
             return (
               <div
                 key={item.id}
                 className={`rounded-xl border p-5 flex flex-col justify-between transition-all shadow-lg ${
-                  isUrgent
+                  isCompleted
+                    ? 'bg-navy-900/50 border-navy-800 opacity-80'
+                    : isUrgent
                     ? 'bg-navy-900/95 border-rose-500/40 shadow-rose-950/20'
                     : 'bg-navy-900/90 border-navy-700/80 hover:border-navy-600 shadow-black/20'
                 }`}
               >
                 <div>
-                  {/* Category & Urgency countdown badge */}
+                  {/* Category & Status countdown badge */}
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <Badge variant="indigo" size="sm">
                       {item.category}
                     </Badge>
-                    <Badge
-                      variant={isUrgent ? 'rose' : item.days_left <= 7 ? 'amber' : 'teal'}
-                      size="sm"
-                      dot={isUrgent}
-                    >
-                      {item.days_left > 0 ? `${item.days_left} Days Left` : 'Due Today'}
-                    </Badge>
+                    {isCompleted ? (
+                      <Badge variant="teal" size="sm">
+                        ✓ Completed
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant={isUrgent ? 'rose' : item.days_left <= 7 ? 'amber' : 'teal'}
+                        size="sm"
+                        dot={isUrgent}
+                      >
+                        {item.days_left > 0 ? `${item.days_left} Days Left` : 'Due Today'}
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Title */}
-                  <h4 className="text-base font-bold text-white mb-2 leading-snug">
+                  <h4
+                    className={`text-base font-bold mb-2 leading-snug ${
+                      isCompleted ? 'text-slate-400 line-through' : 'text-white'
+                    }`}
+                  >
                     {item.title}
                   </h4>
 
@@ -164,7 +261,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                     <div className="flex items-center justify-between text-slate-300">
                       <span className="flex items-center gap-1.5 text-slate-400">
                         <Clock className="w-3.5 h-3.5 text-teal-400" />
-                        Cutoff Date:
+                        Due Date:
                       </span>
                       <span className="font-semibold text-white font-mono">
                         {item.due_date}
@@ -191,18 +288,67 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Footer link to source webpage */}
+                {/* Footer with actions */}
                 <div className="mt-4 pt-3 border-t border-navy-800 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Verified from public portal</span>
-                  <a
-                    href={item.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-teal-400 hover:text-teal-300 font-medium"
-                  >
-                    Open Source
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                  <div className="flex items-center gap-2">
+                    {onToggleComplete && (
+                      <button
+                        onClick={() => onToggleComplete(item.id)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                          isCompleted
+                            ? 'bg-navy-800 border border-navy-700 text-slate-300 hover:text-white'
+                            : 'bg-teal-500/10 border border-teal-500/30 text-teal-300 hover:bg-teal-500/20'
+                        }`}
+                        title={isCompleted ? 'Reopen deadline' : 'Mark deadline as completed'}
+                      >
+                        {isCompleted ? (
+                          <>
+                            <RotateCcw className="w-3 h-3" />
+                            Reopen
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3 h-3" />
+                            Complete
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {onEditDeadline && (
+                      <button
+                        onClick={() => handleOpenEditModal(item)}
+                        className="p-1 rounded-md text-slate-400 hover:text-teal-400 hover:bg-navy-800 transition-colors"
+                        title="Edit deadline"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {onDeleteDeadline && (
+                      <button
+                        onClick={() => onDeleteDeadline(item.id)}
+                        className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-navy-800 transition-colors"
+                        title="Delete deadline"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {item.source_url ? (
+                    <a
+                      href={item.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-teal-400 hover:text-teal-300 font-medium"
+                    >
+                      Source
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 text-[11px]">Manual Tracker</span>
+                  )}
                 </div>
               </div>
             );
@@ -218,18 +364,26 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
               : 'Deadlines automatically extract from monitored circulars and exam schedules.'
           }
           actionText="Add Tracked Deadline"
-          onAction={() => setIsModalOpen(true)}
+          onAction={handleOpenAddModal}
         />
       )}
 
       {/* Add Deadline Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="w-full max-w-md rounded-2xl bg-navy-900 border border-navy-700 shadow-2xl p-6 space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <CalendarClock className="w-5 h-5 text-teal-400" />
               Add Tracked Deadline
             </h3>
+
+            {addError && (
+              <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                <span>{addError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCreateDeadline} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
@@ -247,12 +401,12 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Due Date *
+                  Due Date (YYYY-MM-DD or standard format) *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Oct 25, 2026"
+                  placeholder="e.g. 2026-11-20 or Nov 20, 2026"
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
@@ -322,16 +476,141 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
               <div className="flex justify-end gap-2 pt-3 border-t border-navy-800">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-navy-700 text-slate-300 text-xs font-medium hover:bg-navy-800"
+                  disabled={isSubmittingAdd}
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-navy-700 text-slate-300 text-xs font-medium hover:bg-navy-800 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-navy-950 text-xs font-semibold"
+                  disabled={isSubmittingAdd}
+                  className="px-4 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-navy-950 text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Save Deadline
+                  {isSubmittingAdd ? 'Saving...' : 'Save Deadline'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Deadline Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl bg-navy-900 border border-navy-700 shadow-2xl p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-teal-400" />
+              Edit Tracked Deadline
+            </h3>
+
+            {editError && (
+              <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Due Date *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
+                  >
+                    <option value="Academic">Academic</option>
+                    <option value="Exams">Exams</option>
+                    <option value="Competitions">Competitions</option>
+                    <option value="Scholarships">Scholarships</option>
+                    <option value="Internships">Internships</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value as DeadlinePriority)}
+                    className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
+                  >
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Source Webpage URL
+                </label>
+                <input
+                  type="url"
+                  value={editUrl}
+                  onChange={(e) => setEditUrl(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Description / Instructions
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-navy-950 border border-navy-700 text-white text-xs outline-none focus:border-teal-400"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-navy-800">
+                <button
+                  type="button"
+                  disabled={isSubmittingEdit}
+                  onClick={() => setEditingItem(null)}
+                  className="px-3.5 py-1.5 rounded-lg border border-navy-700 text-slate-300 text-xs font-medium hover:bg-navy-800 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-4 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-navy-950 text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmittingEdit ? 'Saving...' : 'Update Deadline'}
                 </button>
               </div>
             </form>

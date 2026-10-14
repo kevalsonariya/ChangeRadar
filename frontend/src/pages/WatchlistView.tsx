@@ -13,6 +13,7 @@ import {
 import type { MonitoredWebsite } from '../types';
 import { Badge } from '../components/common/Badge';
 import { EmptyState } from '../components/common/EmptyState';
+import { formatDateTime } from '../utils/formatters';
 
 interface WatchlistViewProps {
   websites: MonitoredWebsite[];
@@ -158,7 +159,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     <div className="flex items-center justify-between text-slate-300 pt-1 border-t border-navy-800">
                       <span className="text-slate-400">Last Checked:</span>
                       <span className="text-slate-300 font-mono text-[11px]">
-                        {site.last_checked_at || 'Just now'}
+                        {site.last_checked_at ? formatDateTime(site.last_checked_at) : 'Not checked yet'}
                       </span>
                     </div>
 

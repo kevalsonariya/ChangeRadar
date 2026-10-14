@@ -224,7 +224,7 @@ export const MOCK_NOTIFICATIONS: NotificationItem[] = [
     type: "change",
     title: "Exam Schedule Updated",
     message: "GTU Examination Notices updated the practical timetable for Winter 2026 semester 5.",
-    timestamp: "20 minutes ago",
+    created_at: "20 minutes ago",
     is_read: false,
     target_url: "https://www.gtu.ac.in/Circular.aspx"
   },
@@ -233,7 +233,7 @@ export const MOCK_NOTIFICATIONS: NotificationItem[] = [
     type: "deadline",
     title: "Critical Deadline Approaching",
     message: "ACM Student Chapter Hackathon team registration closes in 3 days (Oct 16).",
-    timestamp: "2 hours ago",
+    created_at: "2 hours ago",
     is_read: false,
     target_url: "https://studentevents.college.edu/hackathon"
   },
@@ -242,7 +242,7 @@ export const MOCK_NOTIFICATIONS: NotificationItem[] = [
     type: "change",
     title: "Assignment Due Date Extended",
     message: "NPTEL Swayam Week 8 deadline has been pushed forward to Oct 18, 2026.",
-    timestamp: "Yesterday, 16:20",
+    created_at: "Yesterday, 16:20",
     is_read: true,
     target_url: "https://swayam.gov.in/nc_details/NPTEL"
   },
@@ -251,7 +251,7 @@ export const MOCK_NOTIFICATIONS: NotificationItem[] = [
     type: "system",
     title: "Automated Webpage Health Check",
     message: "All 5 active monitors polled successfully. No HTTP 404 or connection failures.",
-    timestamp: "Yesterday, 12:00",
+    created_at: "Yesterday, 12:00",
     is_read: true
   }
 ];

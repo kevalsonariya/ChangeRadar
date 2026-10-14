@@ -12,6 +12,7 @@ import type { ChangeRecord } from '../types';
 import { Badge } from '../components/common/Badge';
 import { DiffViewer } from '../components/common/DiffViewer';
 import { EmptyState } from '../components/common/EmptyState';
+import { formatDateTime } from '../utils/formatters';
 
 interface ChangeHistoryViewProps {
   changes: ChangeRecord[];
@@ -144,7 +145,7 @@ export const ChangeHistoryView: React.FC<ChangeHistoryViewProps> = ({
                     <div className="flex items-center gap-3 text-xs text-slate-400 pt-1">
                       <span className="flex items-center gap-1 font-mono">
                         <Calendar className="w-3 h-3 text-slate-500" />
-                        {change.detected_at}
+                        {formatDateTime(change.detected_at)}
                       </span>
                       <span>•</span>
                       <span className="text-emerald-400 font-mono font-bold">
@@ -187,6 +188,7 @@ export const ChangeHistoryView: React.FC<ChangeHistoryViewProps> = ({
                     <DiffViewer
                       oldText={change.old_content_snippet}
                       newText={change.new_content_snippet}
+                      diffUnified={change.diff_unified}
                       websiteName={change.website_name}
                       detectedAt={change.detected_at}
                       additionsCount={change.additions_count}

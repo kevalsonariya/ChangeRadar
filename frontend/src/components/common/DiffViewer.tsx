@@ -4,6 +4,7 @@ import { Columns, AlignLeft, Check, Copy } from 'lucide-react';
 interface DiffViewerProps {
   oldText?: string;
   newText?: string;
+  diffUnified?: string;
   websiteName?: string;
   detectedAt?: string;
   additionsCount?: number;
@@ -13,6 +14,7 @@ interface DiffViewerProps {
 export const DiffViewer: React.FC<DiffViewerProps> = ({
   oldText = '',
   newText = '',
+  diffUnified,
   websiteName,
   detectedAt,
   additionsCount = 0,
@@ -22,7 +24,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const [copied, setCopied] = useState(false);
 
   const handleCopyNew = () => {
-    navigator.clipboard.writeText(newText);
+    const textToCopy = mode === 'unified' && diffUnified ? diffUnified : newText;
+    navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -149,30 +152,73 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 mb-2">
             Sequential Unified Inspection
           </div>
-          {oldLines.map((line, idx) => (
-            <div
-              key={`old-${idx}`}
-              className="flex items-start gap-2 px-2 py-0.5 rounded bg-rose-950/20 text-rose-200 border-l-2 border-rose-500/60"
-            >
-              <span className="select-none text-rose-400/50 w-6 text-right text-xs">
-                -{idx + 1}
-              </span>
-              <span className="select-none text-rose-400">-</span>
-              <span className="break-all whitespace-pre-wrap">{line}</span>
-            </div>
-          ))}
-          {newLines.map((line, idx) => (
-            <div
-              key={`new-${idx}`}
-              className="flex items-start gap-2 px-2 py-0.5 rounded bg-teal-950/30 text-teal-200 border-l-2 border-teal-400"
-            >
-              <span className="select-none text-teal-400/50 w-6 text-right text-xs">
-                +{idx + 1}
-              </span>
-              <span className="select-none text-teal-400">+</span>
-              <span className="break-all whitespace-pre-wrap font-medium">{line}</span>
-            </div>
-          ))}
+          {diffUnified ? (
+            diffUnified.split('\n').map((line, idx) => {
+              if (line.startsWith('+++') || line.startsWith('---')) {
+                return (
+                  <div key={idx} className="text-slate-400 font-semibold px-2 py-0.5 text-xs">
+                    {line}
+                  </div>
+                );
+              }
+              if (line.startsWith('@@')) {
+                return (
+                  <div key={idx} className="px-2 py-0.5 rounded bg-sky-950/40 text-sky-300 font-semibold text-xs border-l-2 border-sky-400">
+                    {line}
+                  </div>
+                );
+              }
+              if (line.startsWith('+')) {
+                return (
+                  <div key={idx} className="flex items-start gap-2 px-2 py-0.5 rounded bg-teal-950/30 text-teal-200 border-l-2 border-teal-400">
+                    <span className="select-none text-teal-400 w-3">+</span>
+                    <span className="break-all whitespace-pre-wrap font-medium">{line.slice(1)}</span>
+                  </div>
+                );
+              }
+              if (line.startsWith('-')) {
+                return (
+                  <div key={idx} className="flex items-start gap-2 px-2 py-0.5 rounded bg-rose-950/20 text-rose-200 border-l-2 border-rose-500/60">
+                    <span className="select-none text-rose-400 w-3">-</span>
+                    <span className="break-all whitespace-pre-wrap">{line.slice(1)}</span>
+                  </div>
+                );
+              }
+              return (
+                <div key={idx} className="flex items-start gap-2 px-2 py-0.5 text-slate-400">
+                  <span className="select-none opacity-40 w-3">&nbsp;</span>
+                  <span className="break-all whitespace-pre-wrap">{line}</span>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              {oldLines.map((line, idx) => (
+                <div
+                  key={`old-${idx}`}
+                  className="flex items-start gap-2 px-2 py-0.5 rounded bg-rose-950/20 text-rose-200 border-l-2 border-rose-500/60"
+                >
+                  <span className="select-none text-rose-400/50 w-6 text-right text-xs">
+                    -{idx + 1}
+                  </span>
+                  <span className="select-none text-rose-400">-</span>
+                  <span className="break-all whitespace-pre-wrap">{line}</span>
+                </div>
+              ))}
+              {newLines.map((line, idx) => (
+                <div
+                  key={`new-${idx}`}
+                  className="flex items-start gap-2 px-2 py-0.5 rounded bg-teal-950/30 text-teal-200 border-l-2 border-teal-400"
+                >
+                  <span className="select-none text-teal-400/50 w-6 text-right text-xs">
+                    +{idx + 1}
+                  </span>
+                  <span className="select-none text-teal-400">+</span>
+                  <span className="break-all whitespace-pre-wrap font-medium">{line}</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

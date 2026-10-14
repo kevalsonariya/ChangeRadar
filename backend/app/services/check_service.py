@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models.models import Website, Snapshot, Change, Notification, utc_now
 from ..services.scraper import fetch_webpage_content
 from ..services.differ import compute_text_diff
+from ..services.deadline_extractor import extract_deadlines_from_text, sync_extracted_deadlines
 
 
 async def check_website(db: Session, website_id: int) -> Dict[str, Any]:
@@ -68,6 +69,17 @@ async def check_website(db: Session, website_id: int) -> Dict[str, Any]:
         db.add(baseline)
         db.commit()
         db.refresh(baseline)
+
+        # Extract initial deadlines if explicitly present in webpage text
+        extracted_deadlines = extract_deadlines_from_text(clean_text)
+        if extracted_deadlines:
+            sync_extracted_deadlines(
+                db=db,
+                extracted_items=extracted_deadlines,
+                website_id=site.id,
+                source_url=site.url,
+                category=site.category or "Academic"
+            )
 
         return {
             "website_id": site.id,
@@ -154,6 +166,17 @@ async def check_website(db: Session, website_id: int) -> Dict[str, Any]:
     # Update website last change timestamp
     site.last_change_at = checked_time
     db.commit()
+
+    # Extract deadlines from updated content if present
+    extracted_deadlines = extract_deadlines_from_text(clean_text)
+    if extracted_deadlines:
+        sync_extracted_deadlines(
+            db=db,
+            extracted_items=extracted_deadlines,
+            website_id=site.id,
+            source_url=site.url,
+            category=site.category or "Academic"
+        )
 
     return {
         "website_id": site.id,

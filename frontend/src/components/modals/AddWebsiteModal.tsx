@@ -10,7 +10,7 @@ interface AddWebsiteModalProps {
     category: string;
     selector?: string;
     check_interval_minutes: number;
-  }) => void;
+  }) => Promise<{ success: boolean; error?: string } | void> | { success: boolean; error?: string } | void;
 }
 
 export const AddWebsiteModal: React.FC<AddWebsiteModalProps> = ({
@@ -23,25 +23,48 @@ export const AddWebsiteModal: React.FC<AddWebsiteModalProps> = ({
   const [category, setCategory] = useState('Academic');
   const [selector, setSelector] = useState('');
   const [checkInterval, setCheckInterval] = useState('60');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     if (!name.trim() || !url.trim()) return;
 
-    onAdd({
-      name: name.trim(),
-      url: url.trim(),
-      category: category.trim() || 'General',
-      selector: selector.trim() || undefined,
-      check_interval_minutes: parseInt(checkInterval, 10) || 60,
-    });
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+      setErrorMessage('Target URL must start with http:// or https://');
+      return;
+    }
 
-    setName('');
-    setUrl('');
-    setSelector('');
-    onClose();
+    setIsSubmitting(true);
+    try {
+      const res = await onAdd({
+        name: name.trim(),
+        url: trimmedUrl,
+        category: category.trim() || 'General',
+        selector: selector.trim() || undefined,
+        check_interval_minutes: parseInt(checkInterval, 10) || 60,
+      });
+
+      if (res && typeof res === 'object' && 'success' in res && !res.success) {
+        setErrorMessage(res.error || 'Failed to register website.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      setName('');
+      setUrl('');
+      setSelector('');
+      setErrorMessage(null);
+      setIsSubmitting(false);
+      onClose();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -155,20 +178,28 @@ export const AddWebsiteModal: React.FC<AddWebsiteModalProps> = ({
             />
           </div>
 
+          {errorMessage && (
+            <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-500/40 text-xs text-rose-300">
+              <span className="font-semibold">Notice:</span> {errorMessage}
+            </div>
+          )}
+
           {/* Footer buttons */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-navy-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-lg border border-navy-700 text-slate-300 hover:text-white hover:bg-navy-800 text-sm font-medium transition-colors"
+              disabled={isSubmitting}
+              className="px-4 py-2.5 rounded-lg border border-navy-700 text-slate-300 hover:text-white hover:bg-navy-800 text-sm font-medium transition-colors disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-navy-950 text-sm font-semibold transition-colors shadow-md shadow-teal-500/20 active:scale-98"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-navy-950 text-sm font-semibold transition-colors shadow-md shadow-teal-500/20 active:scale-98 disabled:opacity-60"
             >
-              Start Monitoring
+              {isSubmitting ? 'Registering...' : 'Start Monitoring'}
             </button>
           </div>
         </form>

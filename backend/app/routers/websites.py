@@ -1,11 +1,12 @@
-"""API routes for Monitored Websites CRUD operations."""
+"""API routes for Monitored Websites CRUD operations and on-demand checking."""
 
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..schemas.schemas import WebsiteCreate, WebsiteResponse
-from ..services import website_service
+from ..models.models import Change
+from ..schemas.schemas import WebsiteCreate, WebsiteResponse, CheckWebsiteResponse, ChangeResponse
+from ..services import website_service, check_service
 
 router = APIRouter(tags=["websites"])
 
@@ -124,3 +125,65 @@ def delete_website(
         "id": website_id,
         "status": "deleted"
     }
+
+
+@router.post(
+    "/{website_id}/check",
+    response_model=CheckWebsiteResponse,
+    summary="Check a website on-demand for content updates"
+)
+async def check_website_on_demand(
+    website_id: int,
+    db: Session = Depends(get_db)
+):
+    """Crawl the website, compare against previous snapshot, and detect changes."""
+    return await check_service.check_website(db, website_id)
+
+
+@router.get(
+    "/{website_id}/changes",
+    response_model=List[ChangeResponse],
+    summary="Get all detected changes for a specific website"
+)
+def get_website_changes(
+    website_id: int,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """Retrieve history of content changes for a specific website."""
+    site = website_service.get_website_by_id(db, website_id)
+    if not site:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Website with ID {website_id} not found"
+        )
+
+    changes = (
+        db.query(Change)
+        .filter(Change.website_id == website_id)
+        .order_by(Change.detected_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for c in changes:
+        results.append({
+            "id": c.id,
+            "website_id": c.website_id,
+            "website_name": site.name,
+            "previous_snapshot_id": c.previous_snapshot_id,
+            "new_snapshot_id": c.new_snapshot_id,
+            "detected_at": c.detected_at,
+            "summary": c.summary,
+            "change_type": c.change_type,
+            "additions_count": c.additions_count,
+            "deletions_count": c.deletions_count,
+            "old_content_snippet": c.old_content_snippet,
+            "new_content_snippet": c.new_content_snippet,
+            "diff_unified": c.diff_unified,
+            "is_read": c.is_read,
+        })
+    return results

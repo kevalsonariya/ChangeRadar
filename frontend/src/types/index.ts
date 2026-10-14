@@ -39,8 +39,19 @@ export interface ChangeRecord {
   is_read: boolean;
 }
 
+export interface CheckWebsiteResult {
+  website_id: number;
+  status: 'baseline_created' | 'no_change' | 'change_detected';
+  message: string;
+  snapshot_id?: number;
+  change_id?: number;
+  content_hash?: string;
+  detected_change?: ChangeRecord;
+  checked_at: string;
+}
+
 export type DeadlinePriority = 'high' | 'medium' | 'low';
-export type DeadlineStatus = 'upcoming' | 'critical' | 'passed';
+export type DeadlineStatus = 'upcoming' | 'critical' | 'passed' | 'completed';
 
 export interface DeadlineItem {
   id: number;
@@ -48,19 +59,22 @@ export interface DeadlineItem {
   title: string;
   due_date: string;
   days_left: number;
-  source_url: string;
+  source_url?: string;
   priority: DeadlinePriority;
   status: DeadlineStatus;
   category: string;
   description?: string;
+  is_completed?: boolean;
 }
 
 export interface NotificationItem {
   id: number;
+  website_id?: number;
+  change_id?: number;
   type: 'change' | 'deadline' | 'system';
   title: string;
   message: string;
-  timestamp: string;
+  created_at: string;
   is_read: boolean;
   target_url?: string;
 }

@@ -12,6 +12,7 @@ import {
 import type { NotificationItem } from '../types';
 import { Badge } from '../components/common/Badge';
 import { EmptyState } from '../components/common/EmptyState';
+import { formatDateTime } from '../utils/formatters';
 
 interface NotificationsViewProps {
   notifications: NotificationItem[];
@@ -130,7 +131,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                     <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-400">
                       <span className="flex items-center gap-1 font-mono">
                         <Clock className="w-3 h-3 text-slate-500" />
-                        {notif.timestamp}
+                        {formatDateTime(notif.created_at)}
                       </span>
                       {notif.target_url && (
                         <a

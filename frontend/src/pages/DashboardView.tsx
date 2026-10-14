@@ -21,6 +21,7 @@ import type {
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { DiffViewer } from '../components/common/DiffViewer';
+import { formatDateTime } from '../utils/formatters';
 
 interface DashboardViewProps {
   websites: MonitoredWebsite[];
@@ -163,7 +164,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-navy-800">
-            <span>Latest: {notifications[0]?.timestamp || 'None'}</span>
+            <span>Latest: {notifications[0] ? formatDateTime(notifications[0].created_at) : 'None'}</span>
             <ArrowUpRight className="w-4 h-4 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </div>
         </div>
@@ -240,6 +241,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <DiffViewer
                   oldText={featuredChange.old_content_snippet}
                   newText={featuredChange.new_content_snippet}
+                  diffUnified={featuredChange.diff_unified}
                   websiteName={featuredChange.website_name}
                   detectedAt={featuredChange.detected_at}
                   additionsCount={featuredChange.additions_count}
