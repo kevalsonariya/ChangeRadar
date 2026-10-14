@@ -33,6 +33,7 @@ class Website(Base):
     category = Column(String(100), default="General", nullable=False)
     selector = Column(String(255), nullable=True)  # Optional CSS selector for element targeting
     check_interval_minutes = Column(Integer, default=60, nullable=False)
+    render_js = Column(Boolean, default=False, nullable=False)  # Optional client-side JS rendering via headless browser
     status = Column(String(50), default="active", nullable=False)  # active, warning, error, paused
     last_checked_at = Column(DateTime, nullable=True)
     last_change_at = Column(DateTime, nullable=True)

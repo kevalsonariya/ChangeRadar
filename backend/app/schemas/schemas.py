@@ -11,6 +11,7 @@ class WebsiteBase(BaseModel):
     category: Optional[str] = Field(default="General", max_length=100)
     selector: Optional[str] = Field(default=None, max_length=255, description="Optional CSS selector")
     check_interval_minutes: int = Field(default=60, ge=1, le=10080, description="Polling frequency in minutes")
+    render_js: bool = Field(default=False, description="Enable headless browser JavaScript rendering")
 
     @field_validator("name")
     @classmethod

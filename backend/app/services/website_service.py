@@ -29,6 +29,7 @@ def create_website(db: Session, website_in: WebsiteCreate) -> Website:
         category=website_in.category or "General",
         selector=website_in.selector,
         check_interval_minutes=website_in.check_interval_minutes,
+        render_js=getattr(website_in, "render_js", False),
         status="active",
         last_checked_at=None,
         last_change_at=None,

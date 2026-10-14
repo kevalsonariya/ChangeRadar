@@ -4,3 +4,5 @@ httpx>=0.27.0
 beautifulsoup4>=4.12.3
 pydantic>=2.6.0
 sqlalchemy>=2.0.28
+# Optional: Headless browser rendering for client-side JavaScript / SPAs
+# playwright>=1.40.0

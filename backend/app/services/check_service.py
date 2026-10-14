@@ -10,12 +10,32 @@ from ..services.differ import compute_text_diff
 from ..services.deadline_extractor import extract_deadlines_from_text, sync_extracted_deadlines
 
 
-async def check_website(db: Session, website_id: int) -> Dict[str, Any]:
-    """Perform an on-demand check for a monitored website.
+# Global in-process registry to prevent overlapping checks for the same website
+ACTIVE_CHECKS: Set[int] = set()
+
+
+async def check_website(db: Session, website_id: int, render_js: Optional[bool] = None) -> Dict[str, Any]:
+    """Perform a check for a monitored website with in-process concurrency guard."""
+    if website_id in ACTIVE_CHECKS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A check for website ID {website_id} is already in progress."
+        )
+
+    ACTIVE_CHECKS.add(website_id)
+    try:
+        return await _check_website_internal(db, website_id, render_js=render_js)
+    finally:
+        ACTIVE_CHECKS.discard(website_id)
+
+
+async def _check_website_internal(db: Session, website_id: int, render_js: Optional[bool] = None) -> Dict[str, Any]:
+    """Internal implementation of check_website.
 
     - On first check: captures initial baseline snapshot (no false change recorded).
     - On subsequent checks: calculates SHA-256 hash, runs text diff, and records change if content differs.
     - On failure: updates last_checked_at and status='error' without creating an empty snapshot.
+    - Uses short transactions: releases read transaction before network I/O.
     """
     site = db.query(Website).filter(Website.id == website_id).first()
     if not site:
@@ -24,13 +44,24 @@ async def check_website(db: Session, website_id: int) -> Dict[str, Any]:
             detail=f"Website with ID {website_id} not found."
         )
 
-    # 1. Fetch content safely
-    success, clean_text, err_msg = await fetch_webpage_content(site.url, site.selector)
+    url = site.url
+    selector = site.selector
+    name = site.name
+    use_render_js = render_js if render_js is not None else getattr(site, "render_js", False)
+    db.commit()  # Release read transaction before network request
+
+    # 1. Fetch content safely without holding database locks
+    if use_render_js:
+        success, clean_text, err_msg = await fetch_webpage_content(url, selector, render_js=True)
+    else:
+        success, clean_text, err_msg = await fetch_webpage_content(url, selector)
 
     if not success:
-        site.last_checked_at = utc_now()
-        site.status = "error"
-        db.commit()
+        site = db.query(Website).filter(Website.id == website_id).first()
+        if site:
+            site.last_checked_at = utc_now()
+            site.status = "error"
+            db.commit()
 
         # Differentiate client error (SSRF, bad URL) vs remote server failure
         if "SSRF" in err_msg or "Invalid URL" in err_msg or "Unsupported" in err_msg:
@@ -40,7 +71,7 @@ async def check_website(db: Session, website_id: int) -> Dict[str, Any]:
 
         raise HTTPException(
             status_code=status_code,
-            detail=f"Failed to check website '{site.name}': {err_msg}"
+            detail=f"Failed to check website '{name}': {err_msg}"
         )
 
     # 2. Compute content hash

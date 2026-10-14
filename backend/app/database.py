@@ -18,9 +18,14 @@ engine = create_engine(
 
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Enforce SQLite foreign key constraints on every database connection."""
+    """Enforce SQLite foreign key constraints, WAL mode, and busy timeout on every database connection."""
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+    except Exception:
+        pass
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 
@@ -39,7 +44,20 @@ def get_db():
 
 
 def init_db():
-    """Create all database tables if they do not exist."""
+    """Create all database tables if they do not exist, and ensure schema migrations are applied."""
     # Import models here to register them with Base before table creation
     from .models import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight migration: ensure render_js column exists on websites table
+    try:
+        with engine.connect() as conn:
+            cursor = conn.connection.cursor()
+            cursor.execute("PRAGMA table_info(websites)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "render_js" not in columns:
+                cursor.execute("ALTER TABLE websites ADD COLUMN render_js BOOLEAN DEFAULT 0 NOT NULL")
+                conn.connection.commit()
+            cursor.close()
+    except Exception:
+        pass

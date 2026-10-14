@@ -28,6 +28,7 @@ def list_websites(
             "category": site.category,
             "selector": site.selector,
             "check_interval_minutes": site.check_interval_minutes,
+            "render_js": bool(getattr(site, "render_js", False)),
             "status": site.status,
             "last_checked_at": site.last_checked_at,
             "last_change_at": site.last_change_at,
@@ -65,6 +66,7 @@ def create_website(
         "category": new_site.category,
         "selector": new_site.selector,
         "check_interval_minutes": new_site.check_interval_minutes,
+        "render_js": bool(getattr(new_site, "render_js", False)),
         "status": new_site.status,
         "last_checked_at": new_site.last_checked_at,
         "last_change_at": new_site.last_change_at,
@@ -96,6 +98,7 @@ def get_website(
         "category": site.category,
         "selector": site.selector,
         "check_interval_minutes": site.check_interval_minutes,
+        "render_js": bool(getattr(site, "render_js", False)),
         "status": site.status,
         "last_checked_at": site.last_checked_at,
         "last_change_at": site.last_change_at,
@@ -134,10 +137,11 @@ def delete_website(
 )
 async def check_website_on_demand(
     website_id: int,
+    render_js: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
     """Crawl the website, compare against previous snapshot, and detect changes."""
-    return await check_service.check_website(db, website_id)
+    return await check_service.check_website(db, website_id, render_js=render_js)
 
 
 @router.get(
