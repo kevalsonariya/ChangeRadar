@@ -8,9 +8,11 @@ import {
   Bell, 
   Settings,
   X,
-  Server
+  Server,
+  LogIn,
+  LogOut
 } from 'lucide-react';
-import type { NavigationTab } from '../../types';
+import type { NavigationTab, UserProfile } from '../../types';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -21,7 +23,11 @@ interface SidebarProps {
   criticalDeadlinesCount?: number;
   isBackendConnected: boolean;
   isDemoMode: boolean;
+  currentUser?: UserProfile | null;
+  onLogout?: () => void;
+  onOpenAuthModal?: () => void;
 }
+
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
@@ -32,7 +38,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   criticalDeadlinesCount = 0,
   isBackendConnected,
   isDemoMode,
+  currentUser,
+  onLogout,
+  onOpenAuthModal,
 }) => {
+
   const navItems = [
     {
       id: 'dashboard' as NavigationTab,
@@ -154,11 +164,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
+        {/* User Account Bar & Logout */}
+        {currentUser ? (
+          <div className="p-3 border-t border-navy-800">
+            <div className="p-2.5 rounded-xl bg-navy-950/70 border border-navy-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center font-bold text-xs shrink-0">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="overflow-hidden">
+                  <div className="text-xs font-bold text-white truncate">{currentUser.name}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{currentUser.email}</div>
+                </div>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                title="Log out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 border-t border-navy-800">
+            <button
+              onClick={onOpenAuthModal}
+              className="w-full py-2 px-3 rounded-xl bg-teal-500/15 border border-teal-500/30 hover:bg-teal-500/25 text-teal-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Sign In / Register</span>
+            </button>
+          </div>
+        )}
+
         {/* Backend & Environment Status Card */}
-        <div className="p-3 border-t border-navy-800">
-          <div className="p-3 rounded-xl bg-navy-950/70 border border-navy-800/80 space-y-2">
+        <div className="p-3 pt-0">
+          <div className="p-2.5 rounded-xl bg-navy-950/70 border border-navy-800/80 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                 <Server className="w-3 h-3 text-teal-400" />
                 Backend Status
               </span>
@@ -169,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </div>
 
-            <div className="text-xs text-slate-400">
+            <div className="text-[11px] text-slate-400">
               {isBackendConnected ? (
                 <span className="text-emerald-400 font-medium">FastAPI Service Connected</span>
               ) : isDemoMode ? (
@@ -178,14 +222,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="text-slate-400">Offline (Standby)</span>
               )}
             </div>
-
-            <div className="pt-1 text-[10px] text-slate-400 border-t border-navy-800/80 flex items-center justify-between">
-              <span>College Project MVP</span>
-              <span className="font-mono text-teal-400/80">v0.1.0</span>
-            </div>
           </div>
         </div>
       </aside>
+
     </>
   );
 };

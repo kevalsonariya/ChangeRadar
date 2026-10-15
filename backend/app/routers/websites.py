@@ -1,12 +1,12 @@
 """API routes for Monitored Websites CRUD operations and on-demand checking."""
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models.models import Change
+from ..models.models import Change, User
 from ..schemas.schemas import WebsiteCreate, WebsiteResponse, CheckWebsiteResponse, ChangeResponse
-from ..services import website_service, check_service
+from ..services import website_service, check_service, auth_service
 
 router = APIRouter(tags=["websites"])
 
@@ -15,10 +15,12 @@ router = APIRouter(tags=["websites"])
 def list_websites(
     skip: int = 0,
     limit: int = 100,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve all websites currently registered for monitoring."""
-    websites = website_service.get_all_websites(db, skip=skip, limit=limit)
+    """Retrieve all websites registered for monitoring by the user."""
+    user_id = current_user.id if current_user else None
+    websites = website_service.get_all_websites(db, skip=skip, limit=limit, user_id=user_id)
     response_list = []
     for site in websites:
         site_dict = {
@@ -47,18 +49,20 @@ def list_websites(
 )
 def create_website(
     website_in: WebsiteCreate,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """Register a new public webpage for change monitoring."""
+    user_id = current_user.id if current_user else None
     # Check for duplicate URL
-    existing = website_service.get_website_by_url(db, website_in.url)
+    existing = website_service.get_website_by_url(db, website_in.url, user_id=user_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Website with URL '{website_in.url}' is already registered (ID: {existing.id})"
         )
 
-    new_site = website_service.create_website(db, website_in)
+    new_site = website_service.create_website(db, website_in, user_id=user_id)
     return {
         "id": new_site.id,
         "name": new_site.name,
@@ -82,10 +86,12 @@ def create_website(
 )
 def get_website(
     website_id: int,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """Retrieve details for a single monitored website by ID."""
-    site = website_service.get_website_by_id(db, website_id)
+    user_id = current_user.id if current_user else None
+    site = website_service.get_website_by_id(db, website_id, user_id=user_id)
     if not site:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -114,10 +120,12 @@ def get_website(
 )
 def delete_website(
     website_id: int,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a monitored website and its related history and snapshots."""
-    deleted = website_service.delete_website(db, website_id)
+    user_id = current_user.id if current_user else None
+    deleted = website_service.delete_website(db, website_id, user_id=user_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -138,10 +146,19 @@ def delete_website(
 async def check_website_on_demand(
     website_id: int,
     render_js: Optional[bool] = None,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """Crawl the website, compare against previous snapshot, and detect changes."""
+    user_id = current_user.id if current_user else None
+    site = website_service.get_website_by_id(db, website_id, user_id=user_id)
+    if not site:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Website with ID {website_id} not found"
+        )
     return await check_service.check_website(db, website_id, render_js=render_js)
+
 
 
 @router.get(
@@ -153,15 +170,18 @@ def get_website_changes(
     website_id: int,
     skip: int = 0,
     limit: int = 50,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """Retrieve history of content changes for a specific website."""
-    site = website_service.get_website_by_id(db, website_id)
+    user_id = current_user.id if current_user else None
+    site = website_service.get_website_by_id(db, website_id, user_id=user_id)
     if not site:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Website with ID {website_id} not found"
         )
+
 
     changes = (
         db.query(Change)

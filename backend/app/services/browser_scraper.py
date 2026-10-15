@@ -11,7 +11,7 @@ from .scraper import is_safe_url, normalize_html_content, DEFAULT_HEADERS, MAX_R
 
 logger = logging.getLogger("changeradar.browser_scraper")
 
-DEFAULT_BROWSER_TIMEOUT_MS = 15000  # 15 seconds
+DEFAULT_BROWSER_TIMEOUT_MS = 20000  # 20 seconds
 DEFAULT_SELECTOR_WAIT_MS = 5000     # 5 seconds
 DEFAULT_JS_SETTLE_MS = 800          # Settle time for dynamic JS mutations
 

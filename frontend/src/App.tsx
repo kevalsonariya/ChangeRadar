@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { NavigationTab, MonitoredWebsite, ChangeRecord, DeadlineItem, DeadlinePriority, NotificationItem } from './types';
+import type { NavigationTab, MonitoredWebsite, ChangeRecord, DeadlineItem, DeadlinePriority, NotificationItem, UserProfile } from './types';
 import {
   MOCK_WEBSITES,
   MOCK_CHANGES,
@@ -21,12 +21,18 @@ import {
   deleteDeadlineApi,
   fetchNotificationsApi,
   markNotificationReadApi,
-  markAllNotificationsReadApi
+  markAllNotificationsReadApi,
+  getMeApi,
+  logoutApi,
+  updateSettingsApi,
+  verifyEmailApi,
+  resendVerificationApi
 } from './services/api';
 
 import { Sidebar } from './components/layout/Sidebar';
 import { Navbar } from './components/layout/Navbar';
 import { AddWebsiteModal } from './components/modals/AddWebsiteModal';
+import { AuthModal } from './components/modals/AuthModal';
 
 import { DashboardView } from './pages/DashboardView';
 import { WatchlistView } from './pages/WatchlistView';
@@ -35,23 +41,31 @@ import { DeadlinesView } from './pages/DeadlinesView';
 import { NotificationsView } from './pages/NotificationsView';
 import { SettingsView } from './pages/SettingsView';
 
+
 export function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isOpenMobile, setIsOpenMobile] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Data states
-  const [websites, setWebsites] = useState<MonitoredWebsite[]>(MOCK_WEBSITES);
-  const [changes, setChanges] = useState<ChangeRecord[]>(MOCK_CHANGES);
-  const [deadlines, setDeadlines] = useState<DeadlineItem[]>(MOCK_DEADLINES);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+  // Data states (Starts fresh and empty for real user data)
+  const [websites, setWebsites] = useState<MonitoredWebsite[]>([]);
+  const [changes, setChanges] = useState<ChangeRecord[]>([]);
+  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Connection & Demo Mode states
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
   const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false);
+
   const [backendError, setBackendError] = useState<string | null>(null);
+
+  // User & Auth State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
 
   // In-flight polling action
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -69,7 +83,51 @@ export function App() {
     }
   }, [operationFeedback]);
 
-  // Check backend health on initial mount
+  // Load authenticated user profile
+  const checkAuth = useCallback(async () => {
+    setIsCheckingAuth(true);
+    try {
+      const meRes = await getMeApi();
+      if (meRes.success && meRes.data) {
+        setCurrentUser(meRes.data);
+      } else {
+        setCurrentUser(null);
+      }
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  }, []);
+
+
+  // Check URL query parameters for ?verify_token=xyz
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verifyToken = params.get('verify_token');
+    if (verifyToken) {
+      verifyEmailApi(verifyToken).then((res) => {
+        if (res.success) {
+          setOperationFeedback({
+            type: 'success',
+            message: 'Email Verified Successfully!',
+            details: 'Your account is now verified. ChangeRadar email notifications are fully enabled.'
+          });
+          checkAuth();
+        } else {
+          setOperationFeedback({
+            type: 'error',
+            message: 'Email Verification Failed',
+            details: res.error || 'Token may be expired or invalid.'
+          });
+        }
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      });
+    }
+  }, [checkAuth]);
+
+  // Check backend health & fetch user targets
   const testBackendConnection = useCallback(async () => {
     setIsTestingConnection(true);
     setBackendError(null);
@@ -77,6 +135,9 @@ export function App() {
       const health = await checkBackendHealth();
       if (health.success && health.data?.status === 'healthy') {
         setIsBackendConnected(true);
+
+        // Fetch user session first
+        await checkAuth();
 
         // Fetch live data from backend
         const [sitesRes, changesRes, deadlinesRes, notifsRes] = await Promise.all([
@@ -86,12 +147,13 @@ export function App() {
           fetchNotificationsApi(),
         ]);
 
-        if (sitesRes.success && sitesRes.data) setWebsites(sitesRes.data);
-        if (changesRes.success && changesRes.data) setChanges(changesRes.data);
-        if (deadlinesRes.success && deadlinesRes.data) setDeadlines(deadlinesRes.data);
-        if (notifsRes.success && notifsRes.data) setNotifications(notifsRes.data);
+        setWebsites(sitesRes.success && sitesRes.data ? sitesRes.data : []);
+        setChanges(changesRes.success && changesRes.data ? changesRes.data : []);
+        setDeadlines(deadlinesRes.success && deadlinesRes.data ? deadlinesRes.data : []);
+        setNotifications(notifsRes.success && notifsRes.data ? notifsRes.data : []);
 
         setIsDemoMode(false);
+
       } else {
         setIsBackendConnected(false);
         setBackendError(health.error || 'FastAPI backend is offline.');
@@ -102,11 +164,72 @@ export function App() {
     } finally {
       setIsTestingConnection(false);
     }
-  }, []);
+  }, [checkAuth]);
 
   useEffect(() => {
     testBackendConnection();
   }, [testBackendConnection]);
+
+  const handleLogout = async () => {
+    await logoutApi();
+    setCurrentUser(null);
+    setOperationFeedback({
+      type: 'info',
+      message: 'Logged out successfully',
+      details: 'You have been signed out of ChangeRadar.'
+    });
+    // Refresh websites / data
+    testBackendConnection();
+  };
+
+  const handleAuthSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    setIsAuthModalOpen(false);
+    setOperationFeedback({
+      type: 'success',
+      message: `Welcome, ${user.name}!`,
+      details: user.email_verified 
+        ? 'Account authenticated and ready.' 
+        : 'Please verify your email address to enable personalized email alerts.'
+    });
+    testBackendConnection();
+  };
+
+  const handleUpdateSettings = async (settings: { email_notifications_enabled?: boolean; name?: string }) => {
+    const res = await updateSettingsApi(settings);
+    if (res.success && res.data) {
+      setCurrentUser(res.data);
+      setOperationFeedback({
+        type: 'success',
+        message: 'Settings updated successfully',
+        details: 'Your notification preferences have been saved.'
+      });
+    } else {
+      setOperationFeedback({
+        type: 'error',
+        message: 'Failed to update settings',
+        details: res.error
+      });
+    }
+  };
+
+  const handleResendVerification = async () => {
+    const res = await resendVerificationApi();
+    if (res.success) {
+      setOperationFeedback({
+        type: 'success',
+        message: 'Verification Email Sent',
+        details: res.data?.message || 'Check your inbox for the verification link.'
+      });
+    } else {
+      setOperationFeedback({
+        type: 'error',
+        message: 'Could not send verification email',
+        details: res.error
+      });
+    }
+  };
+
 
   // Handle Demo Mode switch
   const handleToggleDemoMode = (enabled: boolean) => {
@@ -501,6 +624,78 @@ export function App() {
   const unreadNotificationsCount = notifications.filter(n => !n.is_read).length;
   const criticalDeadlinesCount = deadlines.filter(d => !d.is_completed && (d.status === 'critical' || d.days_left <= 3)).length;
 
+  // 1. Initial auth verification loading spinner
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center text-slate-100 font-sans p-4">
+        <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/30 text-teal-400 mb-4 shadow-xl shadow-teal-500/10">
+          <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+        <h2 className="text-lg font-bold text-white tracking-tight">ChangeRadar</h2>
+        <p className="text-xs text-slate-400 mt-1">Verifying secure session...</p>
+      </div>
+    );
+  }
+
+  // 2. Mandatory Authentication Gate: if user is not logged in, render mandatory AuthModal
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-navy-950 flex flex-col justify-between font-sans relative overflow-hidden">
+        {/* Ambient background decoration */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 left-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top brand header */}
+        <header className="p-6 flex items-center justify-between max-w-6xl w-full mx-auto relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 font-bold">
+              CR
+            </div>
+            <span className="text-lg font-bold text-white tracking-tight">
+              Change<span className="text-teal-400">Radar</span>
+            </span>
+          </div>
+          <div className="text-xs text-slate-400">
+            Secure Webpage Sentinel
+          </div>
+        </header>
+
+        {/* Center content banner */}
+        <main className="flex-1 flex flex-col items-center justify-center text-center p-6 relative z-10 max-w-xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs font-semibold mb-4">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+            Authentication Required
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            Monitor webpage changes and deadlines in real time.
+          </h1>
+          <p className="text-sm text-slate-400 mt-3 max-w-md">
+            Please sign in or register an account to access your personal dashboard, watchlists, diff history, and personalized alert delivery.
+          </p>
+
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="mt-6 px-6 py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-navy-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-teal-500/20 transition-all hover:scale-105 active:scale-95"
+          >
+            Sign In / Register
+          </button>
+        </main>
+
+        {/* Footer */}
+        <footer className="p-6 text-center text-xs text-slate-500 relative z-10 border-t border-navy-900">
+          ChangeRadar &bull; College 5th Semester SGP &bull; Fast, Secure, Automated Monitoring
+        </footer>
+
+        {/* Mandatory Authentication Modal Dialog */}
+        <AuthModal
+          isOpen={true}
+          isMandatory={true}
+          onSuccess={handleAuthSuccess}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-navy-950 text-slate-100 flex flex-col font-sans">
       {/* Responsive Sidebar */}
@@ -513,7 +708,12 @@ export function App() {
         criticalDeadlinesCount={criticalDeadlinesCount}
         isBackendConnected={isBackendConnected}
         isDemoMode={isDemoMode}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
+
+
 
       {/* Main Content Area */}
       <div className="lg:pl-64 flex flex-col flex-1 min-w-0">
@@ -627,6 +827,9 @@ export function App() {
               onTestBackendConnection={testBackendConnection}
               isTestingConnection={isTestingConnection}
               backendError={backendError}
+              currentUser={currentUser}
+              onUpdateSettings={handleUpdateSettings}
+              onResendVerification={handleResendVerification}
             />
           )}
         </main>
@@ -638,8 +841,16 @@ export function App() {
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddWebsite}
       />
+
+      {/* Authentication Modal Dialog */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }
 
 export default App;
+

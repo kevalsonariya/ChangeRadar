@@ -3,21 +3,49 @@
 College Project MVP for monitoring public webpages, detecting changes, and tracking deadlines.
 """
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .database import get_db, init_db, DATABASE_URL
-from .routers import websites, changes, deadlines, notifications
+from .database import get_db, init_db, SessionLocal, DATABASE_URL
+from .routers import auth, websites, changes, deadlines, notifications
+from .services import deadline_reminder_service
+
+logger = logging.getLogger("changeradar.main")
+
+
+async def deadline_reminder_background_loop():
+    """Periodically scans for upcoming deadlines due in 48h, 24h, or 12h."""
+    while True:
+        try:
+            await asyncio.sleep(60)
+            db = SessionLocal()
+            try:
+                await deadline_reminder_service.process_deadline_reminders(db)
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning(f"Error in deadline reminder background loop: {exc}")
+            await asyncio.sleep(60)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan context: initialize SQLite database on startup."""
+    """Application lifespan context: initialize SQLite database and start background tasks."""
     init_db()
+    reminder_task = asyncio.create_task(deadline_reminder_background_loop())
     yield
+    reminder_task.cancel()
+    try:
+        await reminder_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
@@ -44,6 +72,9 @@ app.add_middleware(
 )
 
 # Register routers with both standard and /api prefixes for full client compatibility
+app.include_router(auth.router, prefix="/auth")
+app.include_router(auth.router, prefix="/api/auth")
+
 app.include_router(websites.router, prefix="/websites")
 app.include_router(websites.router, prefix="/api/websites")
 

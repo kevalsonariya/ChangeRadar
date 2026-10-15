@@ -65,6 +65,9 @@ export interface DeadlineItem {
   category: string;
   description?: string;
   is_completed?: boolean;
+  reminded_48h?: boolean;
+  reminded_24h?: boolean;
+  reminded_12h?: boolean;
 }
 
 export interface NotificationItem {
@@ -87,8 +90,18 @@ export interface DashboardSummary {
   health_status: string;
 }
 
+export interface UserProfile {
+  id: number;
+  name: string;
+  email: string;
+  email_verified: boolean;
+  email_notifications_enabled: boolean;
+  created_at: string;
+}
+
 export interface ApiState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
 }
+

@@ -273,6 +273,16 @@ class MonitoringWorker:
         finally:
             db.close()
 
+        # Check and process pending deadline reminders on each worker cycle
+        db_reminders = SessionLocal()
+        try:
+            from .services import deadline_reminder_service
+            await deadline_reminder_service.process_deadline_reminders(db_reminders, now=start_time)
+        except Exception as exc:
+            logger.warning("Error checking deadline reminders in worker: %s", exc)
+        finally:
+            db_reminders.close()
+
         if stats["due_count"] == 0:
             logger.debug("Cycle #%d: No websites currently due for checking.", self.cycle_count)
             return stats

@@ -49,15 +49,38 @@ def init_db():
     from .models import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
-    # Lightweight migration: ensure render_js column exists on websites table
+    # Lightweight migration: ensure render_js and user_id columns exist
     try:
         with engine.connect() as conn:
             cursor = conn.connection.cursor()
+            
+            # websites table migrations
             cursor.execute("PRAGMA table_info(websites)")
             columns = [row[1] for row in cursor.fetchall()]
             if "render_js" not in columns:
                 cursor.execute("ALTER TABLE websites ADD COLUMN render_js BOOLEAN DEFAULT 0 NOT NULL")
-                conn.connection.commit()
+            if "user_id" not in columns:
+                cursor.execute("ALTER TABLE websites ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+            
+            # deadlines table migrations
+            cursor.execute("PRAGMA table_info(deadlines)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "user_id" not in columns:
+                cursor.execute("ALTER TABLE deadlines ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+            if "reminded_48h" not in columns:
+                cursor.execute("ALTER TABLE deadlines ADD COLUMN reminded_48h BOOLEAN DEFAULT 0 NOT NULL")
+            if "reminded_24h" not in columns:
+                cursor.execute("ALTER TABLE deadlines ADD COLUMN reminded_24h BOOLEAN DEFAULT 0 NOT NULL")
+            if "reminded_12h" not in columns:
+                cursor.execute("ALTER TABLE deadlines ADD COLUMN reminded_12h BOOLEAN DEFAULT 0 NOT NULL")
+
+            # notifications table migrations
+            cursor.execute("PRAGMA table_info(notifications)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "user_id" not in columns:
+                cursor.execute("ALTER TABLE notifications ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+
+            conn.connection.commit()
             cursor.close()
     except Exception:
         pass

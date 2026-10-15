@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from ..models.models import Deadline, utc_now
+from ..models.models import Deadline, Website, utc_now
 
 # Explicit deadline context keywords
 DEADLINE_KEYWORDS = [
@@ -172,6 +172,8 @@ def sync_extracted_deadlines(
 ) -> List[Deadline]:
     """Insert newly detected deadlines into SQLite without creating duplicates."""
     created_deadlines: List[Deadline] = []
+    site = db.query(Website).filter(Website.id == website_id).first()
+    owner_user_id = site.user_id if site else None
 
     for item in extracted_items:
         # Deduplication check: same website, title, and due_date
@@ -190,6 +192,7 @@ def sync_extracted_deadlines(
         days_left, status, priority = calculate_deadline_metrics(item["due_date"])
 
         deadline = Deadline(
+            user_id=owner_user_id,
             website_id=website_id,
             title=item["title"],
             description=item.get("description"),
@@ -200,6 +203,9 @@ def sync_extracted_deadlines(
             days_left=days_left,
             category=category,
             source_url=source_url,
+            reminded_48h=False,
+            reminded_24h=False,
+            reminded_12h=False,
             created_at=utc_now()
         )
         db.add(deadline)

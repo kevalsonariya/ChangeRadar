@@ -21,7 +21,7 @@ logger = logging.getLogger("changeradar.scraper")
 # Safety and size limits
 MAX_RESPONSE_SIZE = 5 * 1024 * 1024  # 5 MB
 MAX_REDIRECTS = 5
-DEFAULT_TIMEOUT = 12.0
+DEFAULT_TIMEOUT = 20.0
 
 DEFAULT_HEADERS = {
     "User-Agent": "ChangeRadar/0.1 (Webpage Content Sentinel; College SGP MVP)",

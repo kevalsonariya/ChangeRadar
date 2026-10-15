@@ -22,12 +22,63 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class User(Base):
+    """User account model for authentication and notification preferences."""
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(512), nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    email_notifications_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    # Relationships
+    websites = relationship("Website", back_populates="user", cascade="all, delete-orphan")
+    deadlines = relationship("Deadline", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    verification_tokens = relationship("EmailVerificationToken", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserSession(Base):
+    """Active user session for secure cookie / bearer authentication."""
+
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(128), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    user = relationship("User", back_populates="sessions")
+
+
+class EmailVerificationToken(Base):
+    """Expiring single-use token for email verification."""
+
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(128), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="verification_tokens")
+
+
 class Website(Base):
     """Monitored website configuration and status."""
 
     __tablename__ = "websites"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String(255), nullable=False)
     url = Column(String(1024), nullable=False, unique=True, index=True)
     category = Column(String(100), default="General", nullable=False)
@@ -40,6 +91,7 @@ class Website(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
+    user = relationship("User", back_populates="websites")
     snapshots = relationship(
         "Snapshot",
         back_populates="website",
@@ -113,6 +165,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     website_id = Column(Integer, ForeignKey("websites.id", ondelete="CASCADE"), nullable=True, index=True)
     change_id = Column(Integer, ForeignKey("changes.id", ondelete="CASCADE"), nullable=True, index=True)
     type = Column(String(50), default="system", nullable=False)  # change, deadline, system
@@ -123,6 +176,7 @@ class Notification(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
+    user = relationship("User", back_populates="notifications")
     website = relationship("Website", back_populates="notifications")
     change = relationship("Change", back_populates="notifications")
 
@@ -133,6 +187,7 @@ class Deadline(Base):
     __tablename__ = "deadlines"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     website_id = Column(Integer, ForeignKey("websites.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -143,7 +198,11 @@ class Deadline(Base):
     days_left = Column(Integer, default=0, nullable=False)
     category = Column(String(100), default="Academic", nullable=False)
     source_url = Column(String(1024), nullable=True)
+    reminded_48h = Column(Boolean, default=False, nullable=False)
+    reminded_24h = Column(Boolean, default=False, nullable=False)
+    reminded_12h = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
+    user = relationship("User", back_populates="deadlines")
     website = relationship("Website", back_populates="deadlines")

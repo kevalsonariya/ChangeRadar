@@ -217,6 +217,9 @@ class DeadlineResponse(BaseModel):
     status: str = "upcoming"
     category: str = "Academic"
     source_url: Optional[str] = None
+    reminded_48h: bool = False
+    reminded_24h: bool = False
+    reminded_12h: bool = False
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -242,3 +245,69 @@ class DashboardSummaryResponse(BaseModel):
     upcoming_deadlines_count: int
     unread_notifications_count: int
     health_status: str
+
+
+class UserRegister(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=8, max_length=128)
+    confirm_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Name cannot be blank")
+        return trimmed
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        trimmed = v.strip().lower()
+        import re
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", trimmed):
+            raise ValueError("Invalid email format")
+        return trimmed
+
+    @field_validator("confirm_password")
+    @classmethod
+    def passwords_match(cls, v: str, info) -> str:
+        if "password" in info.data and v != info.data["password"]:
+            raise ValueError("Passwords do not match")
+        return v
+
+
+class UserLogin(BaseModel):
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    email_verified: bool
+    email_notifications_enabled: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserUpdateSettings(BaseModel):
+    email_notifications_enabled: Optional[bool] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(..., min_length=10, max_length=128)
+
+
+class ResendVerificationRequest(BaseModel):
+    email: Optional[str] = None
+

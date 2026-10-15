@@ -6,24 +6,35 @@ from ..models.models import Website
 from ..schemas.schemas import WebsiteCreate
 
 
-def get_all_websites(db: Session, skip: int = 0, limit: int = 100) -> List[Website]:
-    """Retrieve all monitored websites ordered by creation date (newest first)."""
-    return db.query(Website).order_by(Website.created_at.desc()).offset(skip).limit(limit).all()
+def get_all_websites(db: Session, skip: int = 0, limit: int = 100, user_id: Optional[int] = None) -> List[Website]:
+    """Retrieve monitored websites ordered by creation date (newest first). Filter strictly by user_id if supplied."""
+    query = db.query(Website)
+    if user_id is not None:
+        query = query.filter(Website.user_id == user_id)
+    return query.order_by(Website.created_at.desc()).offset(skip).limit(limit).all()
 
 
-def get_website_by_id(db: Session, website_id: int) -> Optional[Website]:
-    """Retrieve a single monitored website by its database ID."""
-    return db.query(Website).filter(Website.id == website_id).first()
+def get_website_by_id(db: Session, website_id: int, user_id: Optional[int] = None) -> Optional[Website]:
+    """Retrieve a single monitored website by its database ID. Enforces ownership if user_id is provided."""
+    query = db.query(Website).filter(Website.id == website_id)
+    if user_id is not None:
+        query = query.filter(Website.user_id == user_id)
+    return query.first()
 
 
-def get_website_by_url(db: Session, url: str) -> Optional[Website]:
+
+def get_website_by_url(db: Session, url: str, user_id: Optional[int] = None) -> Optional[Website]:
     """Retrieve a monitored website by exact URL (used for uniqueness checks)."""
-    return db.query(Website).filter(Website.url == url.strip()).first()
+    query = db.query(Website).filter(Website.url == url.strip())
+    if user_id is not None:
+        query = query.filter(Website.user_id == user_id)
+    return query.first()
 
 
-def create_website(db: Session, website_in: WebsiteCreate) -> Website:
-    """Create a new monitored website entry in the database."""
+def create_website(db: Session, website_in: WebsiteCreate, user_id: Optional[int] = None) -> Website:
+    """Create a new monitored website entry in the database associated with user_id."""
     db_website = Website(
+        user_id=user_id,
         name=website_in.name,
         url=website_in.url,
         category=website_in.category or "General",
@@ -40,11 +51,12 @@ def create_website(db: Session, website_in: WebsiteCreate) -> Website:
     return db_website
 
 
-def delete_website(db: Session, website_id: int) -> bool:
-    """Delete a monitored website by ID. Returns True if deleted, False if not found."""
-    db_website = get_website_by_id(db, website_id)
+def delete_website(db: Session, website_id: int, user_id: Optional[int] = None) -> bool:
+    """Delete a monitored website by ID. Enforces ownership check."""
+    db_website = get_website_by_id(db, website_id, user_id=user_id)
     if not db_website:
         return False
     db.delete(db_website)
     db.commit()
     return True
+

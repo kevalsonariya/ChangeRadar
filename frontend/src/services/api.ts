@@ -13,11 +13,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
+
 
 export interface ApiResult<T> {
   success: boolean;
@@ -234,3 +236,82 @@ export async function markAllNotificationsReadApi(): Promise<ApiResult<{ message
     return handleApiError(err);
   }
 }
+
+// -------------------------------------------------------------
+// Authentication & User Account API Methods
+// -------------------------------------------------------------
+
+export async function registerApi(payload: {
+  name: string;
+  email: string;
+  password: string;
+  confirm_password: string;
+}): Promise<ApiResult<any>> {
+  try {
+    const res = await apiClient.post('/api/auth/register', payload);
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function loginApi(payload: {
+  email: string;
+  password: string;
+}): Promise<ApiResult<any>> {
+  try {
+    const res = await apiClient.post('/api/auth/login', payload);
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function logoutApi(): Promise<ApiResult<{ message: string }>> {
+  try {
+    const res = await apiClient.post('/api/auth/logout');
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function getMeApi(): Promise<ApiResult<any>> {
+  try {
+    const res = await apiClient.get('/api/auth/me');
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function updateSettingsApi(settings: {
+  email_notifications_enabled?: boolean;
+  name?: string;
+}): Promise<ApiResult<any>> {
+  try {
+    const res = await apiClient.patch('/api/auth/settings', settings);
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function verifyEmailApi(token: string): Promise<ApiResult<{ success: boolean; message: string; email_verified: boolean }>> {
+  try {
+    const res = await apiClient.post('/api/auth/verify-email', { token });
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function resendVerificationApi(email?: string): Promise<ApiResult<{ success: boolean; message: string; token?: string }>> {
+  try {
+    const res = await apiClient.post('/api/auth/resend-verification', { email });
+    return { success: true, data: res.data };
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+

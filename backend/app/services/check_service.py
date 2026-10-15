@@ -104,13 +104,29 @@ async def _check_website_internal(db: Session, website_id: int, render_js: Optio
         # Extract initial deadlines if explicitly present in webpage text
         extracted_deadlines = extract_deadlines_from_text(clean_text)
         if extracted_deadlines:
-            sync_extracted_deadlines(
+            new_deadlines = sync_extracted_deadlines(
                 db=db,
                 extracted_items=extracted_deadlines,
                 website_id=site.id,
                 source_url=site.url,
                 category=site.category or "Academic"
             )
+            if site.user and site.user.email_verified and site.user.email_notifications_enabled:
+                from . import email_service
+                for dl in new_deadlines:
+                    try:
+                        await email_service.send_deadline_created_email(
+                            recipient_name=site.user.name,
+                            recipient_email=site.user.email,
+                            title=dl.title,
+                            due_date=dl.due_date,
+                            priority=dl.priority,
+                            category=dl.category,
+                            source_url=dl.source_url,
+                            description=dl.description,
+                        )
+                    except Exception:
+                        pass
 
         return {
             "website_id": site.id,
@@ -181,8 +197,9 @@ async def _check_website_internal(db: Session, website_id: int, render_js: Optio
     db.add(change_record)
     db.flush()
 
-    # Record notification
+    # Record in-app notification
     notification = Notification(
+        user_id=site.user_id,
         website_id=site.id,
         change_id=change_record.id,
         type="change",
@@ -198,16 +215,54 @@ async def _check_website_internal(db: Session, website_id: int, render_js: Optio
     site.last_change_at = checked_time
     db.commit()
 
+    # User-specific Email Delivery (Requirement 5)
+    # Check if the website has an owning user with verified email and email alerts enabled
+    if site.user_id and site.user:
+        owner = site.user
+        if owner.email_verified and owner.email_notifications_enabled:
+            from . import email_service
+            try:
+                await email_service.send_change_alert_email(
+                    recipient_name=owner.name,
+                    recipient_email=owner.email,
+                    website_name=site.name,
+                    website_url=site.url,
+                    summary=diff_data["summary"],
+                    additions_count=diff_data["additions_count"],
+                    deletions_count=diff_data["deletions_count"],
+                    change_type=diff_data["change_type"]
+                )
+            except Exception as email_err:
+                # Delivery failure must not undo monitoring check or database persistence
+                pass
+
     # Extract deadlines from updated content if present
     extracted_deadlines = extract_deadlines_from_text(clean_text)
     if extracted_deadlines:
-        sync_extracted_deadlines(
+        new_deadlines = sync_extracted_deadlines(
             db=db,
             extracted_items=extracted_deadlines,
             website_id=site.id,
             source_url=site.url,
             category=site.category or "Academic"
         )
+        if site.user and site.user.email_verified and site.user.email_notifications_enabled:
+            from . import email_service
+            for dl in new_deadlines:
+                try:
+                    await email_service.send_deadline_created_email(
+                        recipient_name=site.user.name,
+                        recipient_email=site.user.email,
+                        title=dl.title,
+                        due_date=dl.due_date,
+                        priority=dl.priority,
+                        category=dl.category,
+                        source_url=dl.source_url,
+                        description=dl.description,
+                    )
+                except Exception:
+                    pass
+
 
     return {
         "website_id": site.id,

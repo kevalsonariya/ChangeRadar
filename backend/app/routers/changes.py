@@ -4,8 +4,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models.models import Change
+from ..models.models import Change, Website, User
 from ..schemas.schemas import ChangeResponse
+from ..services import auth_service
 
 router = APIRouter(tags=["changes"])
 
@@ -15,10 +16,14 @@ def get_changes(
     website_id: Optional[int] = Query(None, description="Optional filter by website ID"),
     skip: int = 0,
     limit: int = 50,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve detected webpage content changes from the database."""
-    query = db.query(Change)
+    """Retrieve detected webpage content changes from the database scoped to user."""
+    query = db.query(Change).join(Website, Change.website_id == Website.id)
+    if current_user:
+        query = query.filter(Website.user_id == current_user.id)
+
     if website_id is not None:
         query = query.filter(Change.website_id == website_id)
 
@@ -47,10 +52,14 @@ def get_changes(
 @router.get("/{change_id}", response_model=ChangeResponse, summary="Get details of a specific change")
 def get_change_details(
     change_id: int,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """Retrieve full details of a specific detected change, including the unified diff."""
-    c = db.query(Change).filter(Change.id == change_id).first()
+    query = db.query(Change).join(Website, Change.website_id == Website.id).filter(Change.id == change_id)
+    if current_user:
+        query = query.filter(Website.user_id == current_user.id)
+    c = query.first()
     if not c:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -78,10 +87,15 @@ def get_change_details(
 @router.patch("/{change_id}/read", response_model=ChangeResponse, summary="Mark change as reviewed/read")
 def mark_change_read(
     change_id: int,
+    current_user: Optional[User] = Depends(auth_service.get_optional_current_user),
     db: Session = Depends(get_db)
 ):
-    """Mark a detected change as reviewed/read."""
-    c = db.query(Change).filter(Change.id == change_id).first()
+    """Mark a detected change as reviewed/read with user scope."""
+    query = db.query(Change).join(Website, Change.website_id == Website.id).filter(Change.id == change_id)
+    if current_user:
+        query = query.filter(Website.user_id == current_user.id)
+
+    c = query.first()
     if not c:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -108,3 +122,4 @@ def mark_change_read(
         "diff_unified": c.diff_unified,
         "is_read": c.is_read,
     }
+
